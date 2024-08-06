@@ -1,0 +1,63 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON
+from utility import value_dearrayify
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = value_dearrayify(cgi.data.fromGET())
+    cookies = cgi.data.fromCOOKIE()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        header.setAccessControlAllowOrigin(get_domain_url())
+        header.setAccessControlAllowCredentials()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+
+        # Verify the user's account
+        user_id = cookies.get("user_id", 'none')
+        user_token = cookies.get("user_token", 'none')
+        if not auth_db.verify_account(user_id, user_token):
+            raise StatusException(auth_db.last_status)
+
+        client_id = data.get("client_id", None)
+        if client_id is None:
+            status.setStatus("2", ("None",))
+            raise StatusException(status)
+
+        # Check if the client binds to the user
+        if not auth_db.verify_client_by_applyby(client_id, user_id):
+            raise StatusException(auth_db.last_status)
+        
+        # Delete the client in the database
+        auth_db.remove_client(client_id)
+
+        status.setStatus("0")
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

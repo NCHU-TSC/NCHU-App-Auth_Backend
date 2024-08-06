@@ -1,0 +1,15 @@
+{
+    "version": "1.0",
+    "namespace": "Auth",
+    "states": {
+        "-1": ["Unknown Error", "Unknown Error: {}"],
+        "0": ["Success", "Success"],
+        "1": ["Something not provided", "{} is required!"],
+        "2": ["Invaild Format", "{} is not a valid format."],
+        "3": ["Existing Account", "Account {} already exists."],
+        "4": ["Credential Error", "Credential error for the account {}"],
+        "5": ["Redirection URL Code Not Found", "Redirection URL code {} not found for the account {}"],
+        "6": ["In-site Verifying Redirection URL Not Correct", "Redirection URL MUST belong to {}."],
+        "7": ["Account Not Verified", "Account {} is not verified."]
+    }
+}

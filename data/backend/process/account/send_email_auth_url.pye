@@ -1,0 +1,81 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from cgi_mod.data import fromPOST, fromCOOKIE, processOptions_CORS
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON, fromJSON
+from utility.check import check_nchu_email
+from utility import bin2bool
+
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    if processOptions_CORS(get_domain_url(), ["POST"], ["Content-Type"]):
+        return
+
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = fromJSON(fromPOST())
+    cookies = fromCOOKIE()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        header.setAccessControlAllowOrigin(get_domain_url())
+        header.setAccessControlAllowCredentials()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+
+        # Verify the user's account
+        user_id = cookies.get("user_id", 'none')
+        user_token = cookies.get("user_token", 'none')
+        if not auth_db.verify_account(user_id, user_token):
+            raise StatusException(auth_db.last_status)
+
+        # Check if the data is valid
+        email = data.get("email", None)
+        if (email is not None) and (not check_nchu_email(email)):
+            status.setStatus("4", ("Email", email))
+            raise StatusException(status)
+        
+        if not auth_db.can_auth_email(user_id):
+            raise StatusException(auth_db.last_status)
+        
+        # Generate the email authentication URL
+        email_auth_url = f'{get_api_domain_url()}/account/verify_email.pye?code={auth_db.generate_auth_email_code(user_id, email)}'
+        
+        with open('auth_email.htm', 'r') as f:
+            message = Mail(from_email='verify@auth.nchu.app', to_emails=email,
+                           subject='Thanks for signing up for nchu.app!', html_content=f.read().format(email_auth_url)
+            )
+
+        sg_response = SendGridAPIClient(arge.get('SENDGRID_API_KEY')).send(message)
+        auth_db.log(f'{sg_response.status_code}, {sg_response.body}, {sg_response.headers}')
+
+        response["data"] = { "valid_email": bin2bool(auth_db.get_data_by_account(user_id, "Valid_Email")) }
+
+        status.setStatus("0")
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

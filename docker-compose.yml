@@ -1,0 +1,67 @@
+version: '3.8'
+
+networks:
+  reverse-proxy:
+    name: reverse-proxy-axisflow
+    external: true
+  internal:
+
+secrets:
+  db_root_password:
+    file: ./secrets/db_root_password.txt
+  db_password:
+    file: ./secrets/db_password.txt
+  google_oauth_config:
+    file: ./secrets/google_oauth_config.json
+
+services:
+  database:
+    image: mariadb:10.11.6-jammy
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MYSQL_DATABASE: nchu_auth
+      MYSQL_USER: nchuapp_auth
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+    ports:
+      - "3308:3306"
+    secrets:
+      - db_root_password
+      - db_password
+    volumes:
+      - ./data/init:/docker-entrypoint-initdb.d
+      - ./data/db:/var/lib/mysql
+    networks:
+      - internal
+
+  api:
+    build: ./images/api
+    restart: always
+    depends_on:
+      - database
+    secrets:
+      - google_oauth_config
+    volumes:
+      - ./data/httpd/python-gate:/usr/bin/python-cgigate
+      - ./data/httpd/httpd.conf:/usr/local/apache2/conf/httpd.conf
+      - ./data/httpd/config:/usr/local/apache2/conf/conf-enabled
+      - ./data/backend/process:/usr/local/apache2/htdocs
+      - ./data/backend/modules:/var/modules
+    networks:
+      - internal
+      - reverse-proxy
+    environment:
+      - PYTHONPATH=/var/modules
+      - GOOGLE_OAUTH_CONFIG=/run/secrets/google_oauth_config
+      - MAIN_DOMAIN=$MAIN_DOMAIN
+    env_file:
+      - ./secrets/authdb.env
+    labels:
+      - "traefik.enable=true"
+      # http
+      - "traefik.http.routers.nchu_auth-api-http.entrypoints=web"
+      - "traefik.http.routers.nchu_auth-api-http.rule=Host(`api.auth.$MAIN_DOMAIN`)"
+      - "traefik.http.routers.nchu_auth-api-http.middlewares=redirect-to-https@file"
+      # https(secure)
+      - "traefik.http.routers.nchu_auth-api.entrypoints=websecure"
+      - "traefik.http.routers.nchu_auth-api.rule=Host(`api.auth.$MAIN_DOMAIN`)"

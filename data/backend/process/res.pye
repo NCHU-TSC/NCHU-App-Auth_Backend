@@ -1,0 +1,80 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON
+from utility import bin2bool
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = cgi.data.fromGET()
+    cookies = cgi.data.fromCOOKIE()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        header.setAccessControlAllowOrigin(get_domain_url())
+        header.setAccessControlAllowCredentials()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+        
+        type_name = data.get("type")[0]
+        status.setStatus("0")
+        match type_name:
+            # For "entry.htm" client settings
+            case "client":
+                auth_code = data.get("auth_code", [None])[0]
+                if auth_code and auth_code != "none":
+                    client_id = auth_db.get_client_by_auth_code(auth_code)
+                    client_content = auth_db.get_client_content(client_id)
+                else:
+                    client_content = auth_db.get_default_client()
+                response["data"] = { "client_id": client_content.id, "client_name": client_content.name, "client_image": client_content.image }
+
+            # For "profile.htm" settings
+            case "auth_settings" | "auth_verify":
+                user_id = cookies.get("user_id", 'none')
+                user_token = cookies.get("user_token", 'none')
+                if not auth_db.verify_account(user_id, user_token):
+                    raise StatusException(auth_db.last_status)
+                
+                response["data"] = { 
+                    "Login_ID": auth_db.get_data_by_account(user_id, "Login_ID"),
+                    "Name": auth_db.get_data_by_account(user_id, "Name"),
+                    "Email": auth_db.get_data_by_account(user_id, "Email"),
+                    "Valid_Email": bin2bool(auth_db.get_data_by_account(user_id, "Valid_Email")),
+                    "Gender": auth_db.get_data_by_account(user_id, "Gender"),
+                    "Department": auth_db.get_data_by_account(user_id, "Department"),
+                    "Grade": auth_db.get_data_by_account(user_id, "Grade"),
+                    "Role": auth_db.get_data_by_account(user_id, "Role"),
+                    "Photo": auth_db.get_data_by_account(user_id, "Photo"),
+                    "Google_ID": auth_db.get_data_by_account(user_id, "Google_ID")
+                }
+
+            # Error handling
+            case _:
+                status.setStatus("-1", ("Unknown type: " + type_name,))
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

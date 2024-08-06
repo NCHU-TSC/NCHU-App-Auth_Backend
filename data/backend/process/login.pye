@@ -1,0 +1,61 @@
+import cgi_mod as cgi
+from cgi_mod import Cookie
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from cgi_mod.data import fromPOST, fromGET
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.check import check_email
+from utility.json import toJSON, fromJSON
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = fromJSON(fromPOST())
+    data_get = fromGET()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        header.apply()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+        
+        account_name = data.get("account_name")
+        password = data.get("password")
+
+        if check_email(account_name):
+            if not auth_db.verify_account_with_email(account_name, password):
+                raise StatusException(auth_db.last_status)
+            user_id = auth_db.get_account_by_email(account_name)
+        else:
+            if not auth_db.verify_account_with_loginid(account_name, password):
+                raise StatusException(auth_db.last_status)
+            user_id = auth_db.get_account_by_loginid(account_name)
+
+        user_token = auth_db.get_token(user_id)
+        access_id = data_get.get("auth_id", [None])[0]
+
+        header.setCookie(Cookie(key='user_id', value=user_id, secure=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=60*60*24*40))
+        header.setCookie(Cookie(key='user_token', value=user_token, secure=True, http_only=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=60*60*24*40))
+            
+        header.setStatusCode(cgi.StatusCode.c302)
+        header.setLocation(get_domain_url() + cgi.build_url('/profile.htm', {'auth_id': access_id}))
+
+        status.setStatus("0")
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+main()

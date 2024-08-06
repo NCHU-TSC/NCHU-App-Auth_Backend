@@ -1,0 +1,88 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from cgi_mod.data import fromPOST, fromCOOKIE, processOptions_CORS
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON, fromJSON
+from utility.check import check_image_encoded_by_base64, check_nchu_email
+from utility import filtering_get
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    if processOptions_CORS(get_domain_url(), ["POST"], ["Content-Type"]):
+        return
+
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = fromJSON(fromPOST())
+    cookies = fromCOOKIE()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        header.setAccessControlAllowOrigin(get_domain_url())
+        header.setAccessControlAllowCredentials()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+
+        # Verify the user's account
+        user_id = cookies.get("user_id", 'none')
+        user_token = cookies.get("user_token", 'none')
+        if not auth_db.verify_account(user_id, user_token):
+            raise StatusException(auth_db.last_status)
+
+        # Check if the data is valid
+        login_id = data.get("login_id", None)
+        name = data.get("name", None)
+        email = data.get("email", None)
+        old_email = auth_db.get_data_by_account(user_id, "Email")
+        gender = data.get("gender", None)
+        department = data.get("department", None)
+        grade = data.get("grade", None)
+        role = filtering_get(data, "role", ["Manager", "User"], "User")
+        photo = data.get("photo", None)
+
+        if (email is not None) and (not check_nchu_email(email)):
+            status.setStatus("4", ("Email", email))
+            raise StatusException(status)
+        
+        if (photo is not None) and (not check_image_encoded_by_base64(photo)):
+            status.setStatus("4", ("Photo", photo))
+            raise StatusException(status)
+        
+        # Update the account in the database
+        auth_db.update_data_by_account(user_id, "Login_ID", login_id)
+        auth_db.update_data_by_account(user_id, "Name", name)
+        auth_db.update_data_by_account(user_id, "Email", email)
+        auth_db.update_data_by_account(user_id, "Gender", gender)
+        auth_db.update_data_by_account(user_id, "Department", department)
+        auth_db.update_data_by_account(user_id, "Grade", grade)
+        auth_db.update_data_by_account(user_id, "Role", role)
+        auth_db.update_data_by_account(user_id, "Photo", photo)
+
+        if old_email != email:
+            auth_db.update_data_by_account(user_id, "Valid_Email", 0)
+
+        status.setStatus("0")
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

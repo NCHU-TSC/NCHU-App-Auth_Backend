@@ -1,0 +1,10 @@
+{
+    "version": "1.0",
+    "namespace": "Google_Auth",
+    "states": {
+        "-1": ["Unknown Error", "Unknown Error: {}"],
+        "0": ["Success", "Success"],
+        "50": ["Google OAuth: Access Denied", "使用者拒絕授權"],
+        "51": ["Google OAuth: Code not exists", "Code not exists"]
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "version": "1.0",
+    "namespace": "AuthDB",
+    "states": {
+        "-1": ["Unknown Error", "Unknown Error"],
+        "0": ["Success", "Success"],
+        "1": ["Client Credential not found", "Client credential is wrong."],
+        "1.1": ["Client ID not found", "Client ID {} not found."],
+        "2": ["Account Credential not found", "Account credential is wrong."],
+        "2.1": ["Account ID not found", "Account ID {} not found."],
+        "3": ["Redirection URL code not found", "Redirection URL code is wrong."],
+        "3.1": ["Redirection URL code not found", "Redirection URL code {} not found."],
+        "3.2": ["Redirection URL code expired", "Redirection URL code {} expired."],
+        "4": ["Client ID not link with the correct user", "Client ID {} not link with the correct user {}."],
+        "5": ["Cannot delete the default client", "Cannot delete the default client {}."],
+        "6": ["Cannot delete the last manager", "Cannot delete the last manager {}."],
+        "7": ["Cannot verify the email now", "Cannot verify the email now. Please try again later."],
+        "7.1": ["Cannot verify the email now", "Cannot verify the email now. Please wait for {} minutes."],
+        "8": ["Cannot verify the email", "Authentication failed. Code is expired."]
+    }
+}

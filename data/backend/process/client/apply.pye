@@ -1,0 +1,67 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from cgi_mod.data import fromPOST, fromCOOKIE, processOptions_CORS
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON, fromJSON
+from utility.check import check_image_encoded_by_base64
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    if processOptions_CORS(get_domain_url(), ["POST"], ["Content-Type"]):
+        return
+
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = fromJSON(fromPOST())
+    cookies = fromCOOKIE()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        header.setAccessControlAllowOrigin(get_domain_url())
+        header.setAccessControlAllowCredentials()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+
+        # Verify the user's account
+        user_id = cookies.get("user_id", 'none')
+        user_token = cookies.get("user_token", 'none')
+        if not auth_db.verify_account(user_id, user_token):
+            raise StatusException(auth_db.last_status)
+
+        client_name = data.get("name", None)
+        client_image = data.get("image", None) # base64 encoded image
+        # Check if the client name and image are valid
+        if not client_name or not client_image or not check_image_encoded_by_base64(client_image):
+            status.setStatus("1")
+            raise StatusException(status)
+
+        # Create the client in the database
+        client_id = auth_db.create_client(client_name, client_image, user_id)
+        client_token = auth_db.get_token_by_client(client_id)
+
+        response["data"] = {"client_id": client_id, "client_token": client_token}
+        status.setStatus("0")
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

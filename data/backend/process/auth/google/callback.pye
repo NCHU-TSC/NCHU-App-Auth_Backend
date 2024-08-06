@@ -1,0 +1,87 @@
+import google_auth_oauthlib.flow
+from googleapiclient.discovery import build
+import os
+
+import cgi_mod as cgi
+from cgi_mod import Cookie
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from AuthDB.type import GoogleUser
+from utility.status import StatusCode, StatusException
+from utility.json import toJSON
+from utility.response import setStatusResponse
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+    
+    data = cgi.data.fromGET()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        auth_db = AuthDB()
+
+        if 'error' in data:
+            if data['error'] == 'access_denied':
+                status.setStatus("50")
+            else:
+                status.setStatus("-1", ("Google OAuth - " + data['error'],))
+        elif 'code' not in data:
+            status.setStatus("51")
+        else:
+            # Required, call the from_client_secrets_file method to retrieve the client ID from a
+            # client_secret.json file. The client ID (from that file) and access scopes are required. (You can
+            # also use the from_client_config method, which passes the client configuration as it originally
+            # appeared in a client secrets file but doesn't access the file itself.)
+            flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
+                os.getenv('GOOGLE_OAUTH_CONFIG'),
+                scopes=['https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile', 'openid']
+            )
+
+            flow.redirect_uri = f'{ get_api_domain_url() }/auth/google/callback.pye'
+
+            flow.fetch_token(code=data['code'][0])
+            userinfo = build('oauth2', 'v2', credentials=flow.credentials).userinfo().get().execute()
+            auth_db.log(userinfo, sc.database.Database.LogLevel.INFO)
+
+            guser = GoogleUser(userinfo['id'], userinfo.get('email', 'none'), userinfo.get('name', 'none'), userinfo.get('locale', 'none'), userinfo.get('picture', 'none'))
+            if auth_db.exist_google_user(userinfo['id']):
+                auth_db.update_google_user(guser)
+            else:
+                auth_db.add_google_user(guser)
+
+            if auth_db.check_google_user_link_account(guser.id):
+                user_id = auth_db.get_account_by_google_id(guser.id)
+            else:
+                user_id = auth_db.create_account()
+                auth_db.link_account_google_user(user_id, guser.id)
+
+            user_token = auth_db.get_token(user_id)
+            access_id = data.get('state', [None])[0]
+
+            auth_db.log(f'User ID: {user_id}, User Token: {user_token}, Access ID: {access_id}', sc.database.Database.LogLevel.INFO)
+            header.setCookie(Cookie(key='user_id', value=user_id, secure=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=60*60*24*40))
+            header.setCookie(Cookie(key='user_token', value=user_token, secure=True, http_only=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=60*60*24*40))
+            
+            header.setStatusCode(cgi.StatusCode.c302)
+            header.setLocation(get_domain_url() + cgi.build_url('/profile.htm', {'auth_id': access_id}))
+
+            status.setStatus("0")
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + e,))
+    except Exception as e:
+        status.setStatus("-1", (e,))
+
+    header.apply()
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

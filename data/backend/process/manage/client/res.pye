@@ -1,0 +1,79 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON
+from utility import value_dearrayify, labeling
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = value_dearrayify(cgi.data.fromGET())
+    cookies = cgi.data.fromCOOKIE()
+    response = {}
+    status = StatusCode("../states.json")
+
+    try:
+        header.setAccessControlAllowOrigin(get_domain_url())
+        header.setAccessControlAllowCredentials()
+        
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+        
+        type_name = data.get("type", None)
+        status.setStatus("0")
+
+        user_id = cookies.get("user_id", 'none')
+        user_token = cookies.get("user_token", 'none')
+        if not auth_db.verify_account(user_id, user_token):
+            raise StatusException(auth_db.last_status)
+        
+        # Check if the user is a manager
+        if auth_db.get_data_by_account(user_id, "Role") != "Manager":
+            status.setStatus("3", (user_id,))
+            raise StatusException(status)
+        
+        match type_name:
+            case "all_clients":
+                keys = ["ID", "Name"]
+                response["data"] = { "clients": labeling(auth_db.get_clients(keys), keys) }
+
+            case "client_info":
+                client_id = data.get("client_id", None)
+                if client_id is None:
+                    status.setStatus("2", ("None",))
+                    raise StatusException(status)
+                
+                response["data"] = { 
+                    "token": auth_db.get_token_by_client(client_id),
+                    "name": auth_db.get_data_by_client(client_id, "Name"),
+                    "image": auth_db.get_data_by_client(client_id, "Image"),
+                    "state": auth_db.get_data_by_client(client_id, "State"),
+                    "create_time": auth_db.get_data_by_client(client_id, "Create_Time")
+                }
+
+            # Error handling
+            case _:
+                status.setStatus("-1", ("Unknown type: " + type_name,))
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

@@ -1,0 +1,55 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from utility.json import toJSON, fromJSON
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+    
+    data = fromJSON(cgi.data.fromPOST())
+    response = {}
+    status = StatusCode("../states.json")
+
+    try:
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+        
+        client_id = data.get("id")
+        client_token = data.get("token")
+        redirect_url = data.get("redirect_url")
+
+        auth_db.verify_client(client_id, client_token)
+        if auth_db.last_status.code == "1":
+            raise StatusException(auth_db.last_status)
+
+        if auth_db.get_data_by_client(client_id, "State") != "Approved":
+            status.setStatus("3", (client_id,))
+            raise StatusException(status)
+        
+        auth_code = auth_db.generate_auth_code(client_id, redirect_url)
+        
+        response["data"] = { "auth_url": cgi.build_url(get_domain_url() + '/entry.htm', {"auth_id": auth_code}) }
+        status.setStatus("0")
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+    
+    header.apply()
+
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

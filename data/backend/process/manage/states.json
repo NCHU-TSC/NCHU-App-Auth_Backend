@@ -1,0 +1,13 @@
+{
+    "version": "1.0",
+    "namespace": "Manage",
+    "states": {
+        "-1": ["Unknown Error", "Unknown Error: {}"],
+        "0": ["Success", "Success"],
+        "1": ["Invalid client informaton", "Invalid client name or photo"],
+        "2": ["Invalid client ID", "Invalid client ID {}"],
+        "3": ["Access denied", "Access denied for {}"],
+        "4": ["Invalid account informaton", "Invalid account data {}: {}"],
+        "5": ["Invalid account ID", "Invalid account ID {}"]
+    }
+}

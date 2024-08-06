@@ -1,0 +1,73 @@
+import cgi_mod as cgi
+from cgi_mod import Cookie
+import sql_control as sc
+from sql_control import sql
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from cgi_mod.data import fromPOST, fromGET
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.check import check_email
+from utility.json import toJSON, fromJSON
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+
+    data = fromJSON(fromPOST())
+    data_get = fromGET()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        auth_db = AuthDB()
+        auth_db.log(data, sc.database.Database.LogLevel.DEBUG)
+        
+        login_id = data.get("login_id")
+        email = data.get("email")
+        password = data.get("password")
+
+        if not login_id or not email or not password:
+            status.setStatus("1", ("Login ID, E-Mail and Password",))
+            raise StatusException(status)
+        
+        if not check_email(email):
+            status.setStatus("2", ("E-Mail",))
+            raise StatusException(status)
+        
+        if auth_db.get_account_by_email(email):
+            status.setStatus("3", (email,))
+            raise StatusException(status)
+        
+        if auth_db.get_account_by_login_id(login_id):
+            status.setStatus("3", (login_id,))
+            raise StatusException(status)
+
+        user_id = auth_db.create_account()
+        auth_db.update_account(user_id, 'LoginID', login_id)
+        auth_db.update_account(user_id, 'Email', email)
+        auth_db.set_password(user_id, password)
+
+        user_token = auth_db.get_token(user_id)
+        access_id = data_get.get("auth_id", [None])[0]
+
+        header.setCookie(Cookie(key='user_id', value=user_id, secure=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=60*60*24*40))
+        header.setCookie(Cookie(key='user_token', value=user_token, secure=True, http_only=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=60*60*24*40))
+            
+        header.setStatusCode(cgi.StatusCode.c302)
+        header.setLocation(get_domain_url() + cgi.build_url('/profile.htm', {'auth_id': access_id}))
+
+        status.setStatus("0")
+        header.apply()
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+main()

@@ -1,0 +1,47 @@
+import cgi_mod as cgi
+import sql_control as sc
+from sql_control import sql
+from cgi_mod import Cookie
+
+from AuthDB import AuthDB
+from AuthDB.settings import *
+from utility.status import StatusCode, StatusException
+from utility.response import setStatusResponse
+from utility.json import toJSON
+
+def main(argv = cgi.argv, arge = cgi.arge):
+    header = cgi.header()
+    header.setContentType('json')
+
+    queries = cgi.data.fromGET()
+    response = {}
+    status = StatusCode("states.json")
+
+    try:
+        auth_db = AuthDB()
+        auth_db.log(queries, sc.database.Database.LogLevel.DEBUG)
+        
+        status.setStatus("0")
+
+        header.setCookie(Cookie(key="user_id", value='none', secure=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=-1))
+        header.setCookie(Cookie(key="user_token", value='none', secure=True, same_site=Cookie.SameSiteRule.strict, path='/', domain=f'.{domain_name}', max_age=-1))
+        
+        auth_code = queries.get("auth_id", ['none'])[0]
+        header.setLocation(cgi.build_url(get_domain_url() + '/entry.htm', { "auth_id": auth_code }))
+    except StatusException as e:
+        status = e.status
+    except sql.Error as e:
+        status.setStatus("-1", ("Error connecting to the database:" + str(e),))
+    except Exception as e:
+        status.setStatus("-1", (str(e),))
+
+    header.apply()
+    
+    response = setStatusResponse(response, status.toDictionary())
+    print(toJSON(response))
+
+try:
+    main()
+except Exception as e:
+    with open("error.txt", "w") as f:
+        f.write(str(e))

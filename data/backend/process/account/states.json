@@ -1,0 +1,12 @@
+{
+    "version": "1.0",
+    "namespace": "Client",
+    "states": {
+        "-1": ["Unknown Error", "Unknown Error: {}"],
+        "0": ["Success", "Success"],
+        "1": ["Invalid account informaton", "Invalid account data {}: {}"],
+        "2": ["Invalid account ID", "Invalid account ID {}"],
+        "3": ["Account needs to be activated", "Account needs to be activated through {}"],
+        "4": ["Invalid account informaton", "Invalid account data {}: {}"]
+    }
+}
