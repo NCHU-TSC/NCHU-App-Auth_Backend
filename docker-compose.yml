@@ -20,8 +20,8 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
-      MYSQL_DATABASE: nchu_auth
-      MYSQL_USER: nchuapp_auth
+      MYSQL_DATABASE: 
+      MYSQL_USER: 
       MYSQL_PASSWORD_FILE: /run/secrets/db_password
     ports:
       - "3308:3306"
@@ -42,7 +42,7 @@ services:
     secrets:
       - google_oauth_config
     volumes:
-      - ./data/httpd/python-gate:/usr/bin/python-cgigate
+      - ./data/httpd/python-gate:/cgi/python-cgigate
       - ./data/httpd/httpd.conf:/usr/local/apache2/conf/httpd.conf
       - ./data/httpd/config:/usr/local/apache2/conf/conf-enabled
       - ./data/backend/process:/usr/local/apache2/htdocs
