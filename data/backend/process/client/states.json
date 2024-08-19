@@ -4,8 +4,9 @@
     "states": {
         "-1": ["Unknown Error", "Unknown Error: {}"],
         "0": ["Success", "Success"],
-        "1": ["Invalid client informaton", "Invalid client name or photo"],
-        "2": ["Invalid client ID", "Invalid client ID {}"],
-        "3": ["Client not approved", "The client {} is still pending for review"]
+        "1": ["Invalid client informaton", "Invalid client name or photo."],
+        "2": ["Invalid client ID", "Invalid client ID {}."],
+        "3": ["Client not approved", "The client {} is still pending for review."],
+        "4": ["Invalid user credential", "Error user ID or resource token."]
     }
 }

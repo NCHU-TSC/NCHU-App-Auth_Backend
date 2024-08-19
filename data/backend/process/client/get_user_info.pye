@@ -24,17 +24,18 @@ def main(argv = cgi.argv, arge = cgi.arge):
         client_id = data.get("id")
         client_token = data.get("token")
         user_id = data.get("user_id")
-        user_token = data.get("user_token")
+        res_token = data.get("res_token")
 
         auth_db.verify_client(client_id, client_token)
         if auth_db.last_status.code == "1":
             raise StatusException(auth_db.last_status)
-        
-        if not auth_db.verify_account(user_id, user_token):
-            raise StatusException(auth_db.last_status)
 
         if auth_db.get_data_by_client(client_id, "State") != "Approved":
             status.setStatus("3", (client_id,))
+            raise StatusException(status)
+        
+        if auth_db.get_data_by_account(user_id, 'Resource_Token') != res_token:
+            status.setStatus("4")
             raise StatusException(status)
         
         response["data"] = {
