@@ -45,7 +45,7 @@ def main(argv = cgi.argv, arge = cgi.arge):
                 if not auth_db.verify_account(user_id, user_token):
                     raise StatusException(auth_db.last_status)
                 
-                response["data"] = { 
+                response["data"] = {
                     "Login_ID": auth_db.get_data_by_account(user_id, "Login_ID"),
                     "Name": auth_db.get_data_by_account(user_id, "Name"),
                     "Email": auth_db.get_data_by_account(user_id, "Email"),
